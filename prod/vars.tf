@@ -29,6 +29,17 @@ variable "cloudflare_zone_id" {
   sensitive   = true
 }
 
+variable "master_db" {
+  type = object({
+    username = string,
+    password = string,
+    db_name  = optional(string, "platform"),
+    port     = optional(number, 5432)
+  })
+  description = "root password for the main db"
+  sensitive   = true
+}
+
 variable "supertokens_secrets" {
   sensitive = true
   type = object({

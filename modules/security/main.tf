@@ -18,6 +18,28 @@ resource "aws_security_group" "supertokens_ecs" {
   }
 }
 
+resource "aws_security_group" "rds" {
+  vpc_id = var.ecs_vpc_id
+  name   = "${var.environment}-rds"
+
+  ingress {
+    to_port   = 5432
+    from_port = 5432
+    protocol  = "tcp"
+    security_groups = [
+      aws_security_group.supertokens_ecs.id,
+      aws_security_group.platform_lambda.id
+    ]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_security_group" "platform_lambda" {
   vpc_id = var.ecs_vpc_id
   name   = "${var.environment}-plaform_lambda"

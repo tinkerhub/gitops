@@ -4,6 +4,8 @@ locals {
 
   private_dns_namespace = "platform.co"
   supertokens_namespace = "${local.env}.supertokens"
+
+  supertoken_pg_uri = "postgresql://${var.master_db.username}:${var.master_db.password}@${module.main_rds.db_instance_endpoint}/supertokens"
 }
 
 module "secrets" {
@@ -123,4 +125,28 @@ module "supertokens" {
   sg_ids                = [module.security.supertokens_sg_id]
   subnets               = module.network.public_subnet_ids
   service_discovery_arn = module.dns.private_service_discovery_arn["supertokens"]
+}
+
+module "main_rds" {
+  source            = "terraform-aws-modules/rds/aws"
+  identifier        = "${local.env}-platform"
+  engine            = "postgres"
+  engine_version    = "14.1"
+  instance_class    = "db.t4g.micro"
+  allocated_storage = 5
+
+  family = "postgres14"
+
+  db_name                = var.master_db.db_name
+  username               = var.master_db.username
+  port                   = var.master_db.port
+  create_random_password = false
+  password               = var.master_db.password
+
+  skip_final_snapshot = true
+
+  vpc_security_group_ids = [module.security.rds_sg_id]
+
+  create_db_subnet_group = true
+  subnet_ids             = module.network.private_subnet_ids
 }
