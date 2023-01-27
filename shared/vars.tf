@@ -16,8 +16,12 @@ variable "aws_region" {
   sensitive   = true
 }
 
-variable "cloudflare_api_token" {
-  type        = string
-  description = "Cloudflare token"
-  sensitive   = true
+variable "main_vpc_cidr" {
+  type    = string
+  default = "10.0.0.0/16"
+}
+
+variable "main_private_namespace" {
+  type    = string
+  default = "platform.co"
 }

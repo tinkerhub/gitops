@@ -89,7 +89,7 @@ resource "aws_iam_role_policy" "s3" {
 }
 
 resource "aws_iam_role" "main" {
-  assume_role_policy = var.role_type == "ecs" ? data.aws_iam_policy_document.ecs_assume_policy.json : var.role_type == "lamda" ? data.aws_iam_policy_document.lambda.json : ""
+  assume_role_policy = var.role_type == "ecs" ? data.aws_iam_policy_document.ecs_assume_policy.json : var.role_type == "lambda" ? data.aws_iam_policy_document.lambda.json : ""
   name               = "${var.name}-role-${var.environment}"
 }
 
@@ -98,6 +98,13 @@ resource "aws_iam_role_policy_attachment" "ecs_ssm" {
 
   role       = aws_iam_role.main.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "lamda_vpc_deployment" {
+  count = var.attach_lamda_vpc_deployment_policy ? 1 : 0
+
+  role       = aws_iam_role.main.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {

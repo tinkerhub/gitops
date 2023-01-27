@@ -1,31 +1,27 @@
-resource "aws_ssm_parameter" "supertokens_api_key" {
-  count = var.supertokens_api_key == "" ? 0 : 1
-
-  name        = "/terraform/${var.environment}/SUPERTOKENS_API_KEY"
-  description = "Supertoken container api key"
-  type        = "SecureString"
-  value       = var.supertokens_api_key
+locals {
+  secrets = {
+    for secret_name, data in var.create_secrets :
+    secret_name => {
+      description : data.description,
+      type : data.type,
+      value : sensitive(data.value)
+    } if data.value != ""
+  }
 }
 
-data "aws_ssm_parameter" "supertokens_api_key" {
-  name = "/terraform/${var.environment}/SUPERTOKENS_API_KEY"
-  depends_on = [
-    aws_ssm_parameter.supertokens_api_key
-  ]
+resource "aws_ssm_parameter" "main" {
+  for_each = nonsensitive(toset(keys(local.secrets)))
+
+  name        = "/terraform/${var.environment}/${each.key}"
+  description = local.secrets[each.key].description
+  type        = local.secrets[each.key].type
+  value       = local.secrets[each.key].value
+
 }
 
-resource "aws_ssm_parameter" "supertokens_pg_uri" {
-  count = var.supertokens_pg_uri == "" ? 0 : 1
+data "aws_ssm_parameter" "main" {
+  depends_on = [aws_ssm_parameter.main]
 
-  name        = "/terraform/${var.environment}/SUPERTOKENS_PG_URI"
-  description = "Supertoken postgres uri"
-  type        = "SecureString"
-  value       = var.supertokens_pg_uri
-}
-
-data "aws_ssm_parameter" "supertokens_pg_uri" {
-  name = "/terraform/${var.environment}/SUPERTOKENS_PG_URI"
-  depends_on = [
-    aws_ssm_parameter.supertokens_pg_uri
-  ]
+  for_each = var.load_secrets
+  name     = "/terraform/${var.environment}/${each.key}"
 }

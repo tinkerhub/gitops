@@ -24,3 +24,27 @@ variable "private_dns_hosts" {
   type    = map(object({ host : string }))
   default = {}
 }
+
+variable "public_dns_records" {
+  type = list(object({
+    name    = string,
+    value   = string,
+    type    = optional(string, "CNAME"),
+    proxied = optional(bool, true)
+  }))
+  default = []
+}
+
+variable "cloudflare_zone_id" {
+  type = string
+}
+
+variable "enable_ssl" {
+  type    = bool
+  default = false
+}
+
+variable "ssl_validation_method" {
+  type    = string
+  default = "DNS"
+}

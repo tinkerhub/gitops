@@ -41,10 +41,15 @@ variable "attach_ecs_debug_policy" {
   default = false
 }
 
+variable "attach_lamda_vpc_deployment_policy" {
+  type    = bool
+  default = false
+}
+
 variable "role_type" {
   description = "the role for which type of user"
   validation {
-    condition     = contains(["lamda", "ecs", "prod"], var.role_type)
+    condition     = contains(["lambda", "ecs", "prod"], var.role_type)
     error_message = "Allowed values for input_parameter are \"lamda\", \"ecs\"."
   }
 }

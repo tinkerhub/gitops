@@ -6,16 +6,15 @@ variable "environment" {
   }
 }
 
-variable "supertokens_api_key" {
-  description = "api key for supertoken container"
+variable "create_secrets" {
+  description = "secret to be created in ssm for given env"
   sensitive   = true
-  type        = string
-  default     = ""
+  type        = map(object({ type = string, description = optional(string), value = string }))
+  default     = null
 }
 
-variable "supertokens_pg_uri" {
-  description = "supertoken postgres uri"
-  sensitive   = true
-  type        = string
-  default     = ""
+variable "load_secrets" {
+  description = "secret to be loaded to share"
+  type        = set(string)
+  default     = []
 }

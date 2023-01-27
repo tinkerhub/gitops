@@ -2,7 +2,7 @@ terraform {
 
   backend "s3" {
     bucket = "tinkerhub-terraform-state"
-    key    = "environments/shared/terraform.tfstate"
+    key    = "environments/stage/terraform.tfstate"
     region = "us-east-1"
   }
 
@@ -21,6 +21,16 @@ terraform {
   required_version = ">= 1.3.0"
 }
 
+data "terraform_remote_state" "shared" {
+  backend = "s3"
+
+  config = {
+    bucket = "tinkerhub-terraform-state"
+    key    = "environments/shared/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
 provider "aws" {
   region     = var.aws_region
   access_key = var.aws_access_key
@@ -33,3 +43,6 @@ provider "aws" {
   }
 }
 
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
