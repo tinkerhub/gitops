@@ -14,3 +14,7 @@ output "main_vpc_route_table_id" {
 output "private_ns_id" {
   value = aws_service_discovery_private_dns_namespace.main.id
 }
+
+output "private_ns_name" {
+  value = aws_service_discovery_private_dns_namespace.main.name
+}

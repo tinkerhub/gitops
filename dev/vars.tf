@@ -23,7 +23,6 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
-
 variable "cloudflare_zone_id" {
   type        = string
   description = "Cloudflare zoneid copied from dashboard"
@@ -34,19 +33,6 @@ variable "supertokens_secrets" {
   sensitive = true
   type = object({
     api_key = optional(string, "")
-    pg_uri  = optional(string, "")
-  })
-  default = null
-}
-
-variable "supertokens_container" {
-  type = object({
-    registry_uri        = optional(string, "registry.supertokens.io/supertokens/supertokens-postgresql:4.3")
-    container_port      = optional(number, 3567)
-    host_port           = optional(number, 3567)
-    cpu                 = optional(number, 256)
-    memory              = optional(number, 512)
-    enable_exec_command = optional(bool, false)
   })
   default = null
 }
@@ -80,10 +66,10 @@ variable "platform_env" {
 
 variable "platform_domain" {
   type    = string
-  default = "beta.tinkerhub.org"
+  default = "alpha.tinkerhub.org"
 }
 
 variable "platform_website_domain" {
   type    = string
-  default = "stage.tinkerhub.org"
+  default = "dev.tinkerhub.org"
 }

@@ -1,9 +1,10 @@
+
 locals {
-  env             = "stage"
-  supertokens_app = "supertokens-${local.env}"
+  env             = "dev"
+  supertokens_app = "supertokens-stage"
   platform_app    = "platform-${local.env}"
 
-  supertokens_namespace = "${local.env}.supertokens"
+  supertokens_namespace = "stage.supertokens"
 }
 
 module "secrets" {
@@ -11,14 +12,12 @@ module "secrets" {
   environment = local.env
   create_secrets = {
     "supertokens_api_key"     = { type = "SecureString", value = var.supertokens_secrets.api_key }
-    "supertokens_pg_uri"      = { type = "SecureString", value = var.supertokens_secrets.pg_uri }
     "platform_pg_uri"         = { type = "SecureString", value = var.platform_secrets.pg_uri }
     "platform_msg91_auth_key" = { type = "SecureString", value = var.platform_secrets.msg91_auth_key }
   }
 
   load_secrets = [
     "supertokens_api_key",
-    "supertokens_pg_uri",
     "platform_pg_uri",
     "platform_msg91_auth_key"
   ]
@@ -33,18 +32,18 @@ module "network" {
   vpc_id = data.terraform_remote_state.shared.outputs.main_vpc_id
   public_subnets = [{
     az   = "${var.aws_region}a"
-    cidr = "10.0.96.0/20"
+    cidr = "10.0.176.0/20"
     }, {
     az   = "${var.aws_region}b"
-    cidr = "10.0.112.0/20"
+    cidr = "10.0.192.0/20"
   }]
 
   private_subnets = [{
     az   = "${var.aws_region}a"
-    cidr = "10.0.128.0/20"
+    cidr = "10.0.208.0/20"
     }, {
     az   = "${var.aws_region}b"
-    cidr = "10.0.144.0/20"
+    cidr = "10.0.224.0/20"
   }]
 }
 
@@ -67,84 +66,17 @@ module "dns" {
   create_private_dns_ns = false
   private_dns_vpc_id    = data.terraform_remote_state.shared.outputs.main_vpc_id
   private_dns_namespace = data.terraform_remote_state.shared.outputs.private_ns_name
-  private_dns_hosts = {
-    "supertokens" = {
-      host = local.supertokens_namespace
-    }
-  }
 
   enable_ssl         = true
   cloudflare_zone_id = var.cloudflare_zone_id
   public_dns_records = [
     {
       name    = var.platform_domain
-      value   = aws_lb.reverse_proxy.dns_name
+      value   = data.terraform_remote_state.stage.outputs.reverse_proxy_alb_dns_name
       type    = "CNAME"
       proxied = true
     }
   ]
-}
-
-
-module "supertokens_iam_role" {
-  source = "../modules/role"
-
-  role_type                       = "ecs"
-  environment                     = local.env
-  attach_ecs_task_policy          = true
-  attach_ssm_secret_access_policy = true
-  name                            = "ecsSupertokens"
-  ssm_secret_arns = [
-    module.secrets.ssm_arns["supertokens_pg_uri"],
-    module.secrets.ssm_arns["supertokens_api_key"]
-  ]
-}
-
-module "supertokens_logging" {
-  source      = "../modules/logging"
-  app_name    = "supertokens"
-  environment = local.env
-}
-
-data "template_file" "supertokens_task_def" {
-  template = file("../modules/containers/task-definitions/supertokens.json.tpl")
-
-  vars = {
-    # Container def vars
-    APP_NAME       = local.supertokens_app
-    REPOSITORY_URL = var.supertokens_container.registry_uri
-    CONTAINER_PORT = var.supertokens_container.container_port
-    HOST_PORT      = var.supertokens_container.host_port
-
-    # Logging
-    CLOUDWATCH_LOG_GROUP = module.supertokens_logging.cloudwatch-ecs.id
-    AWS_REGION           = var.aws_region
-
-    SECRETS = jsonencode([
-      { name = "POSTGRESQL_CONNECTION_URI", valueFrom = module.secrets.ssm_arns["supertokens_pg_uri"] },
-      { name = "API_KEYS", valueFrom = module.secrets.ssm_arns["supertokens_api_key"] }
-    ])
-  }
-}
-
-module "supertokens" {
-  source = "../modules/containers"
-
-  name            = local.supertokens_app
-  environment     = local.env
-  task_definition = data.template_file.supertokens_task_def.rendered
-  cluster_id      = module.ecs.main_cluster_id
-  cluster_name    = module.ecs.main_cluster_name
-  cpu             = var.supertokens_container.cpu
-  memory          = var.supertokens_container.memory
-
-  // network and se
-  enable_exec_command   = var.supertokens_container.enable_exec_command
-  exec_iam_role_arn     = module.supertokens_iam_role.role_arn
-  iam_policy_attachment = module.supertokens_iam_role.ecs_task_execution_policy
-  sg_ids                = [module.security.supertokens_sg_id]
-  subnets               = module.network.public_subnet_ids
-  service_discovery_arn = module.dns.private_service_discovery_arn["supertokens"]
 }
 
 
@@ -154,6 +86,9 @@ module "platform_logging" {
   environment = local.env
 }
 
+data "aws_security_group" "stage_platform" {
+  name = "stage-platform"
+}
 
 module "platform_iam_role" {
   source = "../modules/role"
@@ -170,7 +105,6 @@ module "platform_iam_role" {
     module.secrets.ssm_arns["platform_msg91_auth_key"]
   ]
 }
-
 
 data "template_file" "platform" {
   template = file("../modules/containers/task-definitions/platform.json.tpl")
@@ -194,15 +128,14 @@ data "template_file" "platform" {
 
     CONTAINER_ENVS = jsonencode(concat(var.platform_env,
       [
-        { name = "SUPERTOKENS_URI", value = "http://${local.supertokens_namespace}.${data.terraform_remote_state.shared.outputs.private_ns_name}:${var.supertokens_container.container_port}" },
+        { name = "SUPERTOKENS_URI", value = "http://${local.supertokens_namespace}.${data.terraform_remote_state.shared.outputs.private_ns_name}:3567" },
         { name = "APP_NAME", value = "platform" },
-        { name = "SUPERTOKENS_API_DOMAIN", value = "https://${var.platform_domain}" },
-        { name = "SUPERTOKENS_WEBSITE_DOMAIN", value = "https://${var.platform_website_domain}" },
+        { name = "SUPERTOKENS_API_DOMAIN", value = var.platform_domain },
+        { name = "SUPERTOKENS_WEBSITE_DOMAIN", value = var.platform_website_domain },
         { name = "SUPERTOKENS_PATH", value = "/auth" },
     ]))
   }
 }
-
 
 module "platform" {
   source = "../modules/containers"
@@ -218,7 +151,8 @@ module "platform" {
   // network and se
   enable_exec_command = var.platform_container.enable_exec_command
   load_balancers = [
-    { tg_arn = aws_lb_target_group.reverse_proxy.arn,
+    { 
+			tg_arn = aws_lb_target_group.reverse_proxy.arn,
       port : var.platform_container.container_port,
       container_name : local.platform_app
     }
@@ -226,44 +160,28 @@ module "platform" {
   task_role_iam_role_arn = module.platform_iam_role.role_arn
   exec_iam_role_arn      = module.platform_iam_role.role_arn
   iam_policy_attachment  = module.platform_iam_role.ecs_task_execution_policy
-  sg_ids                 = [module.security.platform_sg_id]
+  sg_ids                 = [data.aws_security_group.stage_platform.id,module.security.platform_sg_id]
   subnets                = module.network.public_subnet_ids
 }
 
 // reverse proxy settings
-resource "aws_lb" "reverse_proxy" {
-  name               = "main-reverse-proxy"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [module.security.main_alb_sg_id]
-  subnets            = module.network.public_subnet_ids
-}
-
 resource "aws_lb_target_group" "reverse_proxy" {
-  name        = "${local.env}-platform"
-  port        = 80
-  protocol    = "HTTP"
+  name        = "${local.env}-alb-main-tg"
   target_type = "ip"
+  port        = 8080
+  protocol    = "HTTP"
   vpc_id      = data.terraform_remote_state.shared.outputs.main_vpc_id
-
-  health_check {
-    healthy_threshold   = "3"
-    interval            = "30"
-    matcher             = "200"
-    path                = "/"
-    protocol            = "HTTP"
-    timeout             = "3"
-    unhealthy_threshold = "2"
-
-  }
 }
 
-resource "aws_lb_listener" "http" {
-  port              = 80
-  protocol          = "HTTP"
-  load_balancer_arn = aws_lb.reverse_proxy.arn
+resource "aws_lb_listener_certificate" "main" {
+  listener_arn    = data.terraform_remote_state.stage.outputs.reverse_proxy_listener_arn["https"]
+  certificate_arn = module.dns.ssl_certificate_arn[var.platform_domain]
+}
 
-  default_action {
+resource "aws_lb_listener_rule" "main" {
+  listener_arn = data.terraform_remote_state.stage.outputs.reverse_proxy_listener_arn["http"]
+
+  action {
     type = "redirect"
 
     redirect {
@@ -272,16 +190,26 @@ resource "aws_lb_listener" "http" {
       status_code = "HTTP_301"
     }
   }
+
+  condition {
+    host_header {
+      values = [var.platform_domain]
+    }
+  }
 }
 
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.reverse_proxy.arn
-  port              = 443
-  protocol          = "HTTPS"
-  certificate_arn   = module.dns.ssl_certificate_arn[var.platform_domain]
+resource "aws_lb_listener_rule" "https" {
+  listener_arn = data.terraform_remote_state.stage.outputs.reverse_proxy_listener_arn["https"]
 
-  default_action {
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.reverse_proxy.arn
   }
+
+  condition {
+    host_header {
+      values = [var.platform_domain]
+    }
+  }
 }
+

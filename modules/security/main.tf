@@ -69,7 +69,7 @@ resource "aws_security_group" "rds" {
 
 resource "aws_security_group" "platform" {
   vpc_id = var.ecs_vpc_id
-  name   = "${var.environment}-plaform"
+  name   = "${var.environment}-platform"
 
   ingress {
     protocol        = "tcp"
