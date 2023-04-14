@@ -1,0 +1,7 @@
+- name: install docker
+  hosts: stage,prod
+  become: yes
+  remote_user: root
+  tags: [docker]
+  roles:
+    - docker

@@ -1,0 +1,160 @@
+- name: install nginx and setup reverse proxy
+  hosts: apiserver
+  become: yes
+  remote_user: root
+  tags: [nginx]
+  vars:
+    domain_name: tinkerhub.org
+    email: hi@tinkerhub.org
+  vars_prompt:
+    - name: cloudflare_token
+      prompt: Give your cloudflare token?
+  tasks:
+    - name: Update package registry
+      apt:
+        update_cache: true
+    - name: install nginx
+      apt:
+        name: nginx
+        state: latest
+
+    - name: Enable ufw access for Nginx Full
+      ufw:
+        rule: allow
+        name: "Nginx Full"
+
+    - name: create /etc/letsencrypt
+      file: path=/etc/letsencrypt state=directory recurse=yes
+
+    - name: copy cloudflare.ini
+      template: src=./templates/cloudflare.ini.j2 dest=/etc/letsencrypt/cloudflare.ini
+
+    - name: install pip3
+      apt: name=python3-pip state=present
+
+    - name: install certbot and certbot-dns-cloudflare
+      command: pip3 install certbot 'zope.interface>=5.3.0a1' certbot-dns-cloudflare
+
+    - name: run certbot
+      command: certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --email '{{ email }}' --domain '*.{{ domain_name }}' --agree-tos --non-interactive
+
+    - name: copy nginx.conf
+      template: src=./templates/nginx.conf dest=/etc/nginx/nginx.conf mode=preserve
+      notify: restart nginx
+
+    - name: start nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+- name: install docker
+  hosts: apiserver
+  become: yes
+  remote_user: root
+  tags: [docker]
+  tasks:
+    - name: install required pkgs for docker
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+
+- name: start supertokens
+  hosts: apiserver
+  become: yes
+  remote_user: root
+  tags: [supertokens]
+  vars:
+    container_name: supertokens
+    container_image: "registry.supertokens.io/supertokens/supertokens-postgresql:4.3"
+  tasks:
+    - name: get supertokens env
+      become: no
+      local_action: stat path=./secrets/.env.supertokens
+      register: supertokensenv
+
+    - name: copy file if it exists
+      copy: src=./secrets/.env.supertokens dest=~/.env.supertokens
+      when: supertokensenv.stat.exists
+
+    - name: Pull default Docker image
+      docker_image:
+        name: "{{ container_image }}"
+        source: pull
+
+    - name: Create default containers
+      docker_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        env_file: ~/.env.supertokens
+        restart_policy: always
+        published_ports:
+          - 3567:3567
+
+- name: start dev-server
+  hosts: apiserver
+  become: yes
+  remote_user: root
+  tags: [dev-api]
+  vars:
+    container_name: dev-api
+    container_image: "tinkerhub/platform-api:v1.1"
+  tasks:
+    - name: get platform container env
+      become: no
+      local_action: stat path=./secrets/.env.platform-dev
+      register: platformenv
+
+    - name: copy file if it exists
+      copy: src=./secrets/.env.platform-dev dest=~/.env.platform-dev
+      when: platformenv.stat.exists
+
+    - name: Pull default Docker image
+      docker_image:
+        name: "{{ container_image }}"
+        source: pull
+
+    - name: Create platform containers
+      docker_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        env_file: ~/.env.platform-dev
+        restart_policy: always
+        network_mode: bridge
+        recreate: true
+        ports:
+          - 8000:8000

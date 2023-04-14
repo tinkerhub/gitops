@@ -1,0 +1,17 @@
+- name: supertokens container
+  hosts: stage,prod
+  become: yes
+  remote_user: root
+  tags: [supertokens]
+  vars:
+    env: "stage"
+  roles:
+    - role: container
+      vars:
+        container_name: supertokens
+        image: "registry.supertokens.io/supertokens/supertokens-postgresql:4.3"
+        ports:
+          - 3567:3567
+        env_file:
+          source: "../secrets/.env.{{env}}.supertokens"
+          dest: "~/.env.{{env}}.supertokens"

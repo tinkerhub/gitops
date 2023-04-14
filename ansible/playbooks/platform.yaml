@@ -1,0 +1,45 @@
+- name: platform api stage container
+  hosts: stage
+  become: yes
+  remote_user: root
+  tags: [platform-api]
+  roles:
+    # - role: container
+    #   vars:
+    #     container_name: dev-api
+    #     image: "tinkerhub/platform-api-dev:latest"
+    #     ports:
+    #       - 8010:8000
+    #     env_file_path: "../secrets/.env.platform-dev"
+    - role: container
+      vars:
+        container_name: stage-api
+        image: "tinkerhub/platform-api-stage:latest"
+        ports:
+          - 8000:8000
+        env_file:
+          source: "../secrets/.env.platform-stage"
+          dest: "~/.env.stage-api"
+
+- name: platform api container
+  hosts: prod
+  become: yes
+  remote_user: root
+  tags: [platform-api,prod]
+  roles:
+    # - role: container
+    #   vars:
+    #     container_name: dev-api
+    #     image: "tinkerhub/platform-api-dev:latest"
+    #     ports:
+    #       - 8010:8000
+    #     env_file_path: "../secrets/.env.platform-dev"
+    - role: container
+      vars:
+        container_name: api
+        image: "tinkerhub/platform-api:latest"
+        ports:
+          - 8000:8000
+        env_file:
+          source: "../secrets/.env.platform"
+          dest: "~/.env.api"

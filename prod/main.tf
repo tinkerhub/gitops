@@ -1,152 +1,47 @@
 locals {
-  env             = "prod"
-  supertokens_app = "supertokens-${local.env}"
+  env = "prod"
 
-  private_dns_namespace = "platform.co"
-  supertokens_namespace = "${local.env}.supertokens"
-
-  supertoken_pg_uri = "postgresql://${var.master_db.username}:${var.master_db.password}@${module.main_rds.db_instance_endpoint}/supertokens"
-}
-
-module "secrets" {
-  source              = "../modules/secrets"
-  environment         = local.env
-  supertokens_api_key = var.supertokens_secrets.api_key
-  supertokens_pg_uri  = var.supertokens_secrets.pg_uri
-}
-
-module "network" {
-  source = "../modules/network"
-
-  environment    = local.env
-  create_new_vpc = true
-  create_ig      = true
-  vpc_ipv4_cidr  = "10.0.0.0/16"
-  public_subnets = [{
-    az   = "${var.aws_region}a"
-    cidr = "10.0.160.0/20"
-    }, {
-    az   = "${var.aws_region}b"
-    cidr = "10.0.176.0/20"
-  }]
-
-  private_subnets = [{
-    az   = "${var.aws_region}a"
-    cidr = "10.0.128.0/20"
-    }, {
-    az   = "${var.aws_region}b"
-    cidr = "10.0.144.0/20"
-  }]
-}
-
-
-module "ecs" {
-  source      = "../modules/ecs"
-  environment = local.env
-}
-
-module "security" {
-  source      = "../modules/security"
-  environment = local.env
-  ecs_vpc_id  = module.network.main_vpc_id
-}
-
-module "dns" {
-  source = "../modules/dns"
-
-  environment           = local.env
-  create_private_dns_ns = true
-  private_dns_vpc_id    = module.network.main_vpc_id
-  private_dns_namespace = local.private_dns_namespace
-  private_dns_hosts = {
-    "supertokens" = {
-      host = local.supertokens_namespace
-    }
+  // Map of pre-named sizes to look up from
+  sizes = {
+    nano      = "s-1vcpu-1gb"
+    micro     = "s-2vcpu-2gb"
+    small     = "s-2vcpu-4gb"
+    medium    = "s-4vcpu-8gb"
+    large     = "s-6vcpu-16gb"
+    x-large   = "s-8vcpu-32gb"
+    xx-large  = "s-16vcpu-64gb"
+    xxx-large = "s-24vcpu-128gb"
+    maximum   = "s-32vcpu-192gb"
+  }
+  // Map of regions
+  regions = {
+    new_york_1    = "nyc1"
+    new_york_3    = "nyc3"
+    san_francisco = "sfo3"
+    amsterdam     = "ams3"
+    singapore     = "sgp1"
+    london        = "lon1"
+    frankfurt     = "fra1"
+    toronto       = "tor1"
+    india         = "blr1"
   }
 }
 
-
-module "supertokens_iam_role" {
-  source = "../modules/role"
-
-  role_type                       = "ecs"
-  environment                     = local.env
-  attach_ecs_task_policy          = true
-  attach_ssm_secret_access_policy = true
-  name                            = "ecsSupertokens"
-  ssm_secret_arns = [
-    module.secrets.supertokens_api_key_ssm_arn,
-    module.secrets.supertokens_pg_uri_ssm_arn
+resource "digitalocean_droplet" "main" {
+  image  = "ubuntu-20-04-x64"
+  name   = "platform"
+  region = local.regions.india
+  size   = local.sizes.nano
+  ssh_keys = [
+    data.digitalocean_ssh_key.terraform.id
   ]
-}
 
-module "supertokens_logging" {
-  source      = "../modules/logging"
-  app_name    = "supertokens"
-  environment = local.env
-}
+  tags = ["platform-server"]
 
-data "template_file" "supertokens_task_def" {
-  template = file("../modules/containers/task-definitions/supertokens.json.tpl")
-
-  vars = {
-    # Container def vars
-    APP_NAME       = local.supertokens_app
-    REPOSITORY_URL = var.supertokens_container.registry_uri
-    CONTAINER_PORT = var.supertokens_container.container_port
-    HOST_PORT      = var.supertokens_container.host_port
-
-    # Logging
-    CLOUDWATCH_LOG_GROUP = module.supertokens_logging.cloudwatch-ecs.id
-    AWS_REGION           = var.aws_region
-
-    SECRETS = jsonencode([
-      { name = "POSTGRESQL_CONNECTION_URI", valueFrom = module.secrets.supertokens_pg_uri_ssm_arn },
-      { name = "API_KEYS", valueFrom = module.secrets.supertokens_api_key_ssm_arn }
-    ])
+  lifecycle {
+    create_before_destroy = true
   }
+
+  vpc_uuid = digitalocean_vpc.main.id
 }
 
-module "supertokens" {
-  source = "../modules/containers"
-
-  name            = local.supertokens_app
-  environment     = local.env
-  task_definition = data.template_file.supertokens_task_def.rendered
-  cluster_id      = module.ecs.main_cluster_id
-  cluster_name    = module.ecs.main_cluster_name
-  cpu             = var.supertokens_container.cpu
-  memory          = var.supertokens_container.memory
-
-  // network and se
-  enable_exec_command   = var.supertokens_container.enable_exec_command
-  exec_iam_role_arn     = module.supertokens_iam_role.role_arn
-  iam_policy_attachment = module.supertokens_iam_role.ecs_task_execution_policy
-  sg_ids                = [module.security.supertokens_sg_id]
-  subnets               = module.network.public_subnet_ids
-  service_discovery_arn = module.dns.private_service_discovery_arn["supertokens"]
-}
-
-module "main_rds" {
-  source            = "terraform-aws-modules/rds/aws"
-  identifier        = "${local.env}-platform"
-  engine            = "postgres"
-  engine_version    = "14.1"
-  instance_class    = "db.t4g.micro"
-  allocated_storage = 5
-
-  family = "postgres14"
-
-  db_name                = var.master_db.db_name
-  username               = var.master_db.username
-  port                   = var.master_db.port
-  create_random_password = false
-  password               = var.master_db.password
-
-  skip_final_snapshot = true
-
-  vpc_security_group_ids = [module.security.rds_sg_id]
-
-  create_db_subnet_group = true
-  subnet_ids             = module.network.private_subnet_ids
-}

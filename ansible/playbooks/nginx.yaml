@@ -1,0 +1,51 @@
+- name: install nginx and setup reverse proxy
+  hosts: stage 
+  become: yes
+  remote_user: root
+  tags: [nginx,stage]
+  vars:
+    domain_name: tinkerhub.org
+    email: hi@tinkerhub.org
+    reverse_proxies:
+      - server_name: alpha.tinkerhub.org
+        listeners:
+          - source: /
+            target: http://localhost:8010
+      - server_name: beta.tinkerhub.org
+        listeners:
+          - source: /
+            target: http://localhost:8000
+      - server_name: admin.tinkerhub.org
+        listeners:
+          - source: /
+            target: http://localhost:8080
+  vars_prompt:
+    - name: cloudflare_token
+      prompt: Give your cloudflare token?
+  roles:
+    - nginx
+
+# prod server setup
+- name: install nginx and setup reverse proxy
+  hosts: prod
+  become: yes
+  remote_user: root
+  tags: [nginx,prod]
+  vars:
+    domain_name: tinkerhub.org
+    email: hi@tinkerhub.org
+    reverse_proxies:
+      - server_name: gamma.tinkerhub.org
+        listeners:
+          - source: /
+            target: http://localhost:8000
+      - server_name: admin.tinkerhub.org
+        listeners:
+          - source: /
+            target: http://localhost:8080
+  vars_prompt:
+    - name: cloudflare_token
+      prompt: Give your cloudflare token?
+  roles:
+    - nginx
+

@@ -2,16 +2,22 @@ terraform {
 
   backend "s3" {
     bucket = "tinkerhub-terraform-state"
-    key    = "environments/stage/terraform.tfstate"
+    key    = "environments/stagev2/terraform.tfstate"
     region = "us-east-1"
   }
 
   required_providers {
+
+    // aws s3 state sync
     aws = {
       source  = "hashicorp/aws"
       version = "~> 4.16"
     }
 
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
+    }
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "~> 3.0"
@@ -19,16 +25,6 @@ terraform {
   }
 
   required_version = ">= 1.3.0"
-}
-
-data "terraform_remote_state" "shared" {
-  backend = "s3"
-
-  config = {
-    bucket = "tinkerhub-terraform-state"
-    key    = "environments/shared/terraform.tfstate"
-    region = "us-east-1"
-  }
 }
 
 provider "aws" {
@@ -45,4 +41,12 @@ provider "aws" {
 
 provider "cloudflare" {
   api_token = var.cloudflare_api_token
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+data "digitalocean_ssh_key" "terraform" {
+  name = "terraform"
 }

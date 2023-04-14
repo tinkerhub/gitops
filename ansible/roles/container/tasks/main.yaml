@@ -1,0 +1,23 @@
+- name: get container env file
+  become: no
+  local_action: "stat path={{env_file.source}}"
+  register: containerenv
+  when: env_file is defined
+
+- name: copy file if it exists
+  copy: src={{env_file.source}} dest={{env_file.dest}}
+  when: env_file is defined and containerenv.stat.exists
+
+- name: Pull default Docker image
+  docker_image:
+    name: "{{ image }}"
+    source: pull
+
+- name: Create default containers
+  docker_container:
+    name: "{{ container_name }}"
+    image: "{{ image }}"
+    env_file: "{{ env_file.dest | default(omit)}}"
+    restart_policy: always
+    ports: "{{ ports }}"
+    volumes: "{{ volumes | default(omit) }}"

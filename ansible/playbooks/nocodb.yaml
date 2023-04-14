@@ -1,0 +1,17 @@
+- name: nocodb container
+  hosts: prod
+  become: yes
+  remote_user: root
+  tags: [nocodb]
+  roles:
+    - role: container
+      vars:
+        container_name: nocodb
+        image: "nocodb/nocodb:latest"
+        ports:
+          - 8080:8080
+        volumes:
+          - ~/nocodb-mount:/usr/app/data/
+        env_file:
+          source: "../secrets/.env.nocodb"
+          dest: "~/.env.nocodb"

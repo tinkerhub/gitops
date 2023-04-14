@@ -7,11 +7,17 @@ terraform {
   }
 
   required_providers {
+
+    // aws s3 state sync
     aws = {
       source  = "hashicorp/aws"
       version = "~> 4.16"
     }
 
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
+    }
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "~> 3.0"
@@ -35,4 +41,12 @@ provider "aws" {
 
 provider "cloudflare" {
   api_token = var.cloudflare_api_token
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+data "digitalocean_ssh_key" "terraform" {
+  name = "terraform"
 }
